@@ -1,0 +1,531 @@
+version: 2
+references:
+  container_config: &container_config
+    docker:
+      - image: mobify/cci-docker-primary:latest
+    working_directory: /home/ubuntu/pwa-training/
+
+  repo_cache_key: &repo_cache_key
+    pwa-training-repo-{{ .Branch }}-{{ .Revision }}
+
+  npm_cache_key: &npm_cache_key
+    pwa-training-web-npm-{{ .Branch }}-{{ checksum "web/package.json" }}
+
+  amp_npm_cache_key: &amp_npm_cache_key
+    pwa-training-amp-npm-{{ .Branch }}-{{ checksum "amp/package.json" }}
+
+  build_cache_key: &build_cache_key
+    pwa-training-build-{{ .Branch }}-{{ checksum ".circle-sha" }}
+
+  restore_repo: &restore_repo
+    restore_cache:
+      keys:
+        - *repo_cache_key
+
+  restore_node_modules: &restore_node_modules
+    restore_cache:
+      keys:
+        - *npm_cache_key
+        
+  restore_amp_node_modules: &restore_amp_node_modules
+    restore_cache:
+      keys:
+        - *amp_npm_cache_key
+
+  restore_build: &restore_build
+    restore_cache:
+      keys:
+        - *build_cache_key
+
+jobs:
+  build:
+    <<: *container_config
+    steps:
+      - checkout
+      - run:
+          name: save SHA to a file
+          command: echo $CIRCLE_SHA1 > .circle-sha
+      - save_cache:
+          key: *repo_cache_key
+          paths:
+            - .
+      - *restore_node_modules
+      - *restore_amp_node_modules
+      - run:
+          name: Install Dependencies
+          command: npm install
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Install AMP Dependencies
+          command: npm install
+          working_directory: /home/ubuntu/pwa-training/amp/
+      - run:
+          name: Install Dependencies Again
+          command: npm install 
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Rebuild node-sass
+          command: npm rebuild node-sass --force
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Build Project
+          command: npm run prod:build
+          working_directory: /home/ubuntu/pwa-training/web/
+      - save_cache:
+          key: *npm_cache_key
+          paths:
+            - /home/ubuntu/pwa-training/web/node_modules
+      - save_cache:
+          key: *amp_npm_cache_key
+          paths:
+            - /home/ubuntu/pwa-training/amp/node_modules
+      - save_cache:
+          key: *build_cache_key
+          paths:
+            - /home/ubuntu/pwa-training/web/build
+
+  test-unit:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - *restore_amp_node_modules
+      - run:
+          name: Lint
+          command: pwd && npm run lint
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Run Unit Tests
+          command: npm test -- --runInBand
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: AMP
+          command: pwd && npm run test:all
+          working_directory: /home/ubuntu/pwa-training/amp/
+
+  test-e2e-amp:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - *restore_amp_node_modules
+      - run:
+          name: Run AMP Smoke Test
+          command: xvfb-run -a ./tests/e2e/smoke-test.sh
+          when: always
+          working_directory: /home/ubuntu/pwa-training/amp/
+
+  test-e2e-merlins:
+    <<: *container_config
+    # Uncomment when running full Merlin's E2E suite with parallelism
+    # parallelism: 2
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - *restore_build
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Wait for Server
+          command: bash ./scripts/wait-for-dependencies.sh
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Run home E2E test
+          command: xvfb-run -a npm run test:e2e -- --test tests/e2e/workflows/merlins/home-example.js
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Run push-subscribe E2E test
+          command: xvfb-run -a npm run test:e2e -- --test tests/e2e/workflows/merlins/push-subscribe.js
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      # Uncomment to run full suite of Merlin's E2E tests
+      # - run:
+      #     name: Run end2end Test
+      #     command: xvfb-run -a ./tests/e2e/test-scripts/run-e2e-in-parallel.sh
+      #     when: always
+      #     working_directory: /home/ubuntu/pwa-training/web/
+      - store_test_results:
+          path: web/tests/reports/
+          when: always
+      - store_artifacts:
+          path: web/tests/screenshots/
+          when: always
+  
+  test-e2e-chrome-incognito:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - *restore_amp_node_modules
+      - *restore_build
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Verify that PWA renders in private browsing mode
+          command: xvfb-run -a npm run test:e2e -- -e chrome_incognito --test tests/e2e/workflows/merlins/guest-checkout.js
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - store_test_results:
+          path: web/tests/reports/
+          when: always
+      - store_artifacts:
+          path: web/tests/screenshots/
+          when: always
+
+  test-e2e-googlebot:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - *restore_build
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Verify that PWA renders on Googlebot
+          command: xvfb-run -a npm run test:e2e -- -e chrome_googlebot --test tests/e2e/workflows/merlins/home-example.js
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - store_test_results:
+          path: web/tests/reports/
+          when: always
+      - store_artifacts:
+          path: web/tests/screenshots/
+          when: always
+
+  test-e2e-sfcc:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - run:
+          name: Change Connector to SFCC
+          command: bash ./scripts/change-connector.sh sfcc
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Build Project
+          command: npm run prod:build
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Wait for Server
+          command: bash ./scripts/wait-for-dependencies.sh
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Run end2end Test on SFCC connector
+          command: xvfb-run -a npm run test:e2e -- --tag sfcc --group workflows/sfcc
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - store_test_results:
+          path: web/tests/reports/
+          when: always
+      - store_artifacts:
+          path: web/tests/screenshots/
+          when: always
+
+  test-e2e-hybris:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - run:
+          name: Change Connector to Hybris
+          command: bash ./scripts/change-connector.sh hybris
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Build Project
+          command: npm run prod:build
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Wait for Server
+          command: bash ./scripts/wait-for-dependencies.sh
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Run end2end test on hybris connector
+          command: xvfb-run -a npm run test:e2e -- --tag hybris --group workflows/hybris
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - store_test_results:
+          path: web/tests/reports/
+          when: always
+      - store_artifacts:
+          path: web/tests/screenshots/
+          when: always
+
+  test-e2e-hybris-saucelabs:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - run:
+          name: Change Connector to Hybris
+          command: bash ./scripts/change-connector.sh hybris
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Build Project
+          command: npm run prod:build
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Start Sauce Connect
+          command: node launch-sauce-connect.js
+          when: always
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/tests/e2e/sauce-connect
+      - run:
+          name: Wait for Sauce Connect
+          command: bash ./wait-for-sauce-connect.sh
+          working_directory: /home/ubuntu/pwa-training/web/tests/e2e/sauce-connect
+      - run:
+          name: Wait for Server
+          command: bash ./scripts/wait-for-dependencies.sh
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Run end2end test on Saucelabs on Android emulator
+          command: xvfb-run -a npm run test:e2e -- -e saucelabs_android --tag hybris --group workflows/hybris
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - store_test_results:
+          path: web/tests/reports/
+          when: always
+      - store_artifacts:
+          path: web/tests/screenshots/
+          when: always
+
+  test-e2e-stub:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - run:
+          name: Change Connector
+          command: bash ./scripts/change-connector.sh stub
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Build Project
+          command: npm run prod:build
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Wait for Server
+          command: bash ./scripts/wait-for-dependencies.sh
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Run end2end Test on Stub connector
+          command: xvfb-run -a npm run test:e2e -- --tag stub --group workflows/stub
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - store_test_results:
+          path: web/tests/reports/
+          when: always
+      - store_artifacts:
+          path: web/tests/screenshots/
+          when: always
+
+  test-performance:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - *restore_build
+      - run:
+          name: Start Test Server
+          command: npm run test:server
+          background: true
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Wait for Server
+          command: bash ./scripts/wait-for-dependencies.sh
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Accept Cert
+          command: bash ./scripts/accept-cert-ci.sh
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Analyzing Build Size
+          command: npm run test:max-file-size -- build tests/performance/gzip-size-config.json
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Lighthouse Tests
+          command: xvfb-run -a npm run test:lighthouse production preview --silent
+          when: always
+          working_directory: /home/ubuntu/pwa-training/web/
+      - store_artifacts:
+          path: web/tests/performance/lighthouse/reports/
+          when: always
+
+  deploy-merlins:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - *restore_build
+      - run:
+          name: Deploy Bundle
+          command: bash ./scripts/ci-deploy.sh Merlins
+          working_directory: /home/ubuntu/pwa-training/web/
+
+  deploy-sfcc:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - run:
+          name: Change Connector to SFCC
+          command: bash ./scripts/change-connector.sh sfcc
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Deploy Bundle
+          command: bash ./scripts/ci-deploy.sh SFCC
+          working_directory: /home/ubuntu/pwa-training/web/
+
+  deploy-hybris:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - run:
+          name: Change Connector to Hybris
+          command: bash ./scripts/change-connector.sh hybris
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Deploy Bundle
+          command: bash ./scripts/ci-deploy.sh Hybris
+          working_directory: /home/ubuntu/pwa-training/web/
+
+  deploy-stub:
+    <<: *container_config
+    steps:
+      - *restore_repo
+      - *restore_node_modules
+      - run:
+          name: Change Connector to Stub
+          command: bash ./scripts/change-connector.sh stub
+          working_directory: /home/ubuntu/pwa-training/web/
+      - run:
+          name: Deploy Bundle
+          command: bash ./scripts/ci-deploy.sh Stub
+          working_directory: /home/ubuntu/pwa-training/web/
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      - build
+      - test-unit:
+          requires:
+            - build
+      - test-e2e-amp:
+          requires:
+            - build
+      - test-performance:
+          requires:
+            - build
+      - test-e2e-chrome-incognito:
+          requires:
+            - build
+          filters:
+            branches:
+              only: [master, /release-.*/, develop]
+      - test-e2e-googlebot:
+          requires:
+            - build
+          filters:
+            branches:
+              only: [master, /release-.*/, develop, /googlebot.*/]
+      - deploy-merlins:
+          requires:
+            - build
+            - test-unit
+            - test-performance
+          filters:
+            branches:
+              only: [master, /release-.*/]
+      - test-e2e-sfcc:
+          requires:
+            - build
+      - deploy-sfcc:
+          requires:
+            - build
+            - test-unit
+            - test-e2e-sfcc
+            - test-performance
+          filters:
+            branches:
+              only: [master, /release-.*/]
+      - test-e2e-hybris:
+          requires:
+            - build
+      - deploy-hybris:
+          requires:
+            - build
+            - test-unit
+            - test-e2e-hybris
+            - test-performance
+          filters:
+            branches:
+              only: [master, /release-.*/]
+      - test-e2e-stub:
+          requires:
+            - build
+      - deploy-stub:
+          requires:
+            - build
+            - test-unit
+            - test-e2e-stub
+            - test-performance
+          filters:
+            branches:
+              only: [master, /release-.*/]
+
+  e2e-nightly-run:
+    triggers:
+      - schedule:
+          # Run at midnight Pacific time
+          cron: "0 8 * * *"
+          filters:
+            branches:
+              only: [master, /release-.*/, /googlebot.*/]
+    jobs:
+      - build
+      - test-performance:
+          requires:
+            - build
+      - test-e2e-merlins:
+          requires:
+            - build
+      - test-e2e-sfcc:
+          requires:
+            - build
+      - test-e2e-hybris:
+          requires:
+            - build
+      - test-e2e-googlebot:
+          requires:
+            - build

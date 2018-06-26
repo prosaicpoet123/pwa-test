@@ -1,0 +1,49 @@
+// Footer
+// ===
+
+// Root
+// ---
+
+.t-footer {
+    //
+}
+
+// Navigation
+// ---
+
+.t-footer__navigation {
+    background-color: $secondary-brand-color;
+
+    color: #fff;
+}
+
+
+.t-footer__navigation-link {
+    display: inline-block;
+    margin-right: $unit;
+    margin-left: $unit;
+    padding-bottom: $unit;
+
+    color: #fff;
+    font-size: $small-font-size;
+}
+
+
+
+// Panel Newsletter
+// ---
+//
+// 1. To get that placeholder height _just_ right, at least on a fairly wide device
+
+.t-footer__newsletter {
+    .pw-field__label {
+        @include visually-hidden();
+    }
+}
+
+.t-footer__newsletter-loading {
+    display: flex;
+    justify-content: center;
+
+    margin: 78px 0; // 1
+}

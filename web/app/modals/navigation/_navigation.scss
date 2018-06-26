@@ -1,0 +1,27 @@
+// Navigation
+// ===
+
+// Social Link
+// ---
+
+.m-navigation__social-link {
+    display: block;
+
+    & + & {
+        margin-left: $unit*3;
+    }
+}
+
+// Copyright
+// ---
+
+.m-navigation__copyright {
+    color: $neutral-40;
+    font-size: $small-font-size;
+    line-height: $font-size;
+    text-align: center;
+}
+
+.m-navigation__padding-end-tap-size {
+    padding-right: $tap-size;
+}

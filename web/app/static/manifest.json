@@ -1,0 +1,18 @@
+{
+  "name": "Merlin's Potions Potions",
+  "short_name": "Merlin's Potions",
+  "start_url": "https://www.merlinspotions.com?homescreen=1",
+  "background_color": "#fff",
+  "theme_color":" #4e439b",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "https://cdn.mobify.com/sites/pwa-training/production/static/img/global/app-icon.png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn.mobify.com/sites/pwa-training/production/static/img/global/app-icon-512.png",
+      "sizes": "512x512"
+    }
+  ]
+}
