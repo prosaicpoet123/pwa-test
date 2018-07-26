@@ -28,6 +28,7 @@ import CartAction from './partials/cart-action'
 import SearchAction from './partials/search-action'
 import BackAction from './partials/back-action'
 import MoreMenuAction from './partials/more-action'
+import UserAction from './partials/user-action'
 
 import {isRunningInAstro} from '../app/selectors'
 
@@ -116,7 +117,7 @@ class Header extends React.Component {
                             :
                             <NavigationAction innerButtonClassName={innerButtonClassName} onClick={onMenuClick} />
                         }
-                        <SearchAction innerButtonClassName={innerButtonClassName} onClick={onSearchOpenClick} />
+                        <UserAction innerButtonClassName={innerButtonClassName} onClick={onSearchOpenClick} />
                         <HeaderTitle isCollapsed={isCollapsed} />
                         {!isStandaloneApp &&
                             <StoresAction innerButtonClassName={innerButtonClassName} />
@@ -130,9 +131,9 @@ class Header extends React.Component {
 
                 <Search
                     className="t-header__search"
-                    isOverlay
+                    //isOverlay
                     onClickSuggestion={onSearchCloseClick}
-                    isOpen={searchIsOpen}
+                    //isOpen={searchIsOpen}
                     onChange={this.onChangeSearchQuery}
                     onClose={onSearchCloseClick}
                     onSubmit={this.onSearchSubmit}

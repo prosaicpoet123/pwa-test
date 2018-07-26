@@ -22,6 +22,8 @@
 // Most of the Progressive Web SDK components have base styles and are often
 // required in order for that component to function correctly.
 
+@import 'node_modules/progressive-web-sdk/dist/components/banner/base';
+
 @import 'node_modules/progressive-web-sdk/dist/components/accordion/base';
 @import 'node_modules/progressive-web-sdk/dist/components/badge/base';
 @import 'node_modules/progressive-web-sdk/dist/components/breadcrumbs/base';
@@ -76,6 +78,9 @@
 // SDK components. Because these custom styles are not crucial to the
 // functionality of their components, these imported files can be removed or
 // modified at the user's discretion.
+
+
+@import 'pw-components/banner';
 
 @import 'pw-components/accordion';
 @import 'pw-components/badge';

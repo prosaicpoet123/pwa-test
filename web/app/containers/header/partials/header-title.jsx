@@ -10,7 +10,7 @@ import DangerousHTML from 'progressive-web-sdk/dist/components/dangerous-html'
 import Link from 'progressive-web-sdk/dist/components/link'
 import {HeaderBarTitle} from 'progressive-web-sdk/dist/components/header-bar'
 
-import logo from '../../../static/svg/logo.svg'
+import logo from '../../../static/svg/hb-logo-initials.svg'
 
 const HeaderTitle = ({isCollapsed}) => {
     const linkClassName = classNames('t-header__link', {
